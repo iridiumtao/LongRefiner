@@ -1,4 +1,9 @@
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from a .env file if it exists.
+# This allows users to set LONGREFINER_BACKEND in a file for convenience.
+load_dotenv()
 
 __version__ = "0.0.1"
 

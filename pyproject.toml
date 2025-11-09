@@ -31,8 +31,12 @@ dependencies = [
     "flashrag-dev",
     "peft",
     "accelerate",
+    "python-dotenv",
     "vllm; sys_platform == 'linux'",
 ]
+
+[project.optional-dependencies]
+vllm = ["vllm"]
 
 [project.urls]
 Homepage = "https://github.com/iridiumtao/LongRefiner"

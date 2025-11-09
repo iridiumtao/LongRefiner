@@ -50,12 +50,21 @@ source .venv/bin/activate
 # Install base dependencies (for Apple Silicon / CPU)
 uv pip install -e .
 
-# For NVIDIA GPU users, install with HPC extras for vllm
-# This will automatically use the correct PyTorch version with CUDA support
+# For NVIDIA GPU users, install with vllm extras for high performance
 uv pip install -e ".[vllm]"
 ```
 > **Why `uv` and `pyproject.toml`?**
 > Using a `pyproject.toml` file provides a standardized way to define project metadata and dependencies. `uv` is an extremely fast Python package installer and resolver that reads this file, making the process of setting up development environments significantly faster and more reliable than traditional methods.
+
+### ⚙️ Configuration
+
+You can control which backend the library uses via an environment variable. Create a `.env` file in the root of the project by copying the example:
+
+```bash
+cp .env.example .env
+```
+
+Then, edit the `.env` file to choose your desired backend (`hf` or `vllm`). The library will automatically load this setting when it starts.
 
 ## 🚀 Quick Start
 
