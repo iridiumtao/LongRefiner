@@ -1,9 +1,0 @@
-vllm
-transformers
-rank_bm25
-tqdm
-numpy
-json_repair
-torch
-tiktoken
-flashrag-dev
