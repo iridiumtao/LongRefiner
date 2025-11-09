@@ -59,45 +59,19 @@ uv pip install -e ".[vllm]"
 
 ## 🚀 Quick Start
 
-You can download the pre-trained LoRA models from [here](https://huggingface.co/collections/jinjiajie/longrefiner-683ac32af1dc861d4c5d00e2).
+The project will automatically detect the appropriate backend (`vllm` for HPC with NVIDIA GPUs, `hf` for Apple Silicon and others). You can override this behavior by setting the `LONGREFINER_BACKEND` environment variable to either `"vllm"` or `"hf"`.
 
-### On Apple Silicon (macOS) or standard CPU/GPU machines
-
-For local development or environments without `vllm`, use the `LongRefinerHF` class.
-
-```python
-import json
-from longrefiner import LongRefinerHF # Use the Hugging Face-based refiner
-
-# Initialize
-# This will automatically run on MPS if available
-refiner = LongRefinerHF(
-    base_model_path="Qwen/Qwen2.5-3B-Instruct",
-    query_analysis_module_lora_path="jinjiajie/Query-Analysis-Qwen2.5-3B-Instruct",
-    doc_structuring_module_lora_path="jinjiajie/Doc-Structuring-Qwen2.5-3B-Instruct",
-    global_selection_module_lora_path="jinjiajie/Global-Selection-Qwen2.5-3B-Instruct",
-    score_model_name="bge-reranker-v2-m3",
-    score_model_path="BAAI/bge-reranker-v2-m3",
-)
-
-# Load sample data
-with open("assets/sample_data.json", "r") as f:
-    data = json.load(f)
-question = list(data.keys())[0]
-document_list = list(data.values())[0]
-
-# Process documents
-refined_result = refiner.run(question, document_list, budget=2048)
-print(refined_result)
+For example, to force the Hugging Face backend on a machine where `vllm` is installed:
+```bash
+export LONGREFINER_BACKEND="hf"
+python your_script.py
 ```
 
-### On HPC with NVIDIA GPUs (High-Performance)
-
-For the best performance, use the original `LongRefiner` which leverages `vllm`.
+Below is a unified code example. It will work on any platform.
 
 ```python
 import json
-from longrefiner import LongRefiner # The original vllm-based refiner
+from longrefiner import LongRefiner # Dynamically selected based on your environment
 
 # Initialize
 refiner = LongRefiner(
@@ -107,7 +81,6 @@ refiner = LongRefiner(
     global_selection_module_lora_path="jinjiajie/Global-Selection-Qwen2.5-3B-Instruct",
     score_model_name="bge-reranker-v2-m3",
     score_model_path="BAAI/bge-reranker-v2-m3",
-    max_model_len=25000,
 )
 
 # Load sample data
@@ -118,7 +91,16 @@ document_list = list(data.values())[0]
 
 # Process documents
 refined_result = refiner.run(question, document_list, budget=2048)
-print(refined_result)
+print(json.dumps(refined_result, indent=2, ensure_ascii=False))
+```
+
+For advanced use cases where you need to explicitly import a specific backend, you can do so:
+```python
+# To explicitly use the vllm backend:
+from longrefiner import LongRefinerVLLM
+
+# To explicitly use the Hugging Face backend:
+from longrefiner import LongRefinerHF
 ```
 
 ## 📚 Training
