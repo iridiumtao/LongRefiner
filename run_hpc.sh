@@ -154,9 +154,11 @@ if [ "$INSIDE_SINGULARITY" = "false" ] && [ -n "$SINGULARITY_BASH_PATH" ]; then
     echo "-------------------------------------------"
     if [ -f "$SINGULARITY_BASH_PATH" ]; then
         # Use the SCRIPT_DIR already defined at the top of the script
-        SCRIPT_PATH="$SCRIPT_DIR/$(basename "${BASH_SOURCE[0]}")"
-        # Execute this script inside Singularity, ensuring we're in the script's directory
-        bash "$SINGULARITY_BASH_PATH" -c "cd '$SCRIPT_DIR' && bash '$SCRIPT_PATH'"
+        SCRIPT_PATH="$SCRIPT_DIR/$(basename "${BASH_SOURCE[0]:-$0}")"
+        # Execute the script inside Singularity by passing command via stdin
+        # The Singularity bash script will execute the command in the Singularity environment
+        echo "cd '$SCRIPT_DIR' && bash '$SCRIPT_PATH'" | bash "$SINGULARITY_BASH_PATH"
+        exit $?
     else
         echo "ERROR: Singularity bash script not found at $SINGULARITY_BASH_PATH"
         exit 1
