@@ -49,7 +49,12 @@ main_execution() {
         echo "uv not found. Installing..."
         curl -LsSf https://astral.sh/uv/install.sh | sh
         # Add uv to the current shell's PATH
-        source "$HOME/.cargo/env"
+        # Use . instead of source for sh compatibility, and use the correct path
+        if [ -f "$HOME/.local/bin/env" ]; then
+            . "$HOME/.local/bin/env"
+        fi
+        # Also add to PATH directly as fallback
+        export PATH="$HOME/.local/bin:$PATH"
         echo "uv installed successfully."
     else
         echo "Found."
@@ -59,7 +64,8 @@ main_execution() {
     echo "Step 4: Syncing project environment with pyproject.toml..."
     # 'uv sync' will create the .venv if it doesn't exist and install all dependencies,
     # including the project itself in editable mode by default.
-    uv sync
+    # Use the system Python version that was detected earlier
+    uv sync --python "$PYTHON_VERSION"
 
     echo "Environment is up to date."
 
@@ -98,7 +104,8 @@ fi
 
 # Load environment variables from .env
 set -a
-source .env
+# Use . instead of source for sh compatibility
+. .env
 set +a
 
 # 0.1. Clone repository if needed

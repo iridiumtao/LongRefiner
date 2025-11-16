@@ -28,6 +28,8 @@ dependencies = [
     "numpy",
     "json_repair",
     "torch",
+    "torchvision",
+    "torchaudio",
     "tiktoken",
     "flashrag-dev",
     "sentencepiece"
