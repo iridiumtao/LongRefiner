@@ -193,6 +193,42 @@ class LongRefiner:
         self.score_model.eval()
         self.score_model.half()
 
+    def shutdown(self):
+        """
+        Properly shutdown the vLLM engine and clean up resources.
+        This should be called when done using the LongRefiner instance.
+        """
+        if hasattr(self, 'model') and self.model is not None:
+            try:
+                # vLLM's LLM object cleanup - try multiple methods
+                # Method 1: Direct shutdown method (if available)
+                if hasattr(self.model, 'shutdown'):
+                    self.model.shutdown()
+                # Method 2: Shutdown via llm_engine
+                elif hasattr(self.model, 'llm_engine') and self.model.llm_engine is not None:
+                    if hasattr(self.model.llm_engine, 'shutdown'):
+                        self.model.llm_engine.shutdown()
+                    # Also try to stop the engine's background processes
+                    if hasattr(self.model.llm_engine, 'model_executor') and hasattr(self.model.llm_engine.model_executor, 'driver_worker'):
+                        # Try to stop the driver worker
+                        pass  # Driver worker cleanup is handled by engine shutdown
+            except Exception as e:
+                # Log but don't raise - cleanup should be best-effort
+                print(f"Warning: Error during vLLM engine shutdown: {e}")
+            finally:
+                self.model = None
+
+    def __del__(self):
+        """
+        Destructor to ensure cleanup even if shutdown() is not explicitly called.
+        This is a safety net, but explicit shutdown() is still recommended.
+        """
+        try:
+            self.shutdown()
+        except Exception:
+            # Ignore errors in destructor
+            pass
+
     def run(
         self,
         question: str,

@@ -199,3 +199,11 @@ if isinstance(refined_result, list) and refined_result:
 # 結束 wandb run
 wandb.finish()
 print("\n✅ Wandb logging completed!")
+
+# --- 8. 清理資源 ---
+print("Cleaning up resources...")
+try:
+    refiner.shutdown()
+    print("✅ Resources cleaned up successfully.")
+except Exception as e:
+    print(f"Warning: Error during cleanup: {e}")
