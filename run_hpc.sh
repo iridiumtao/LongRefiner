@@ -81,8 +81,17 @@ main_execution() {
 }
 
 # Change to the script's directory to ensure relative paths work correctly
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+# Use a method compatible with both bash and sh
+if [ -n "$BASH_SOURCE" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+    # Fallback for sh
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+fi
+cd "$SCRIPT_DIR" || {
+    echo "ERROR: Cannot change to script directory: $SCRIPT_DIR"
+    exit 1
+}
 
 # Check if we're already inside Singularity
 INSIDE_SINGULARITY=false
@@ -94,14 +103,16 @@ fi
 echo "===== LongRefiner HPC Setup ====="
 
 # 0. Setup environment file
+ENV_FILE="$SCRIPT_DIR/.env"
+ENV_EXAMPLE="$SCRIPT_DIR/.env.example"
 echo -n "Step 0: Setting up .env file... "
-if [ ! -f .env ]; then
-    if [ ! -f .env.example ]; then
+if [ ! -f "$ENV_FILE" ]; then
+    if [ ! -f "$ENV_EXAMPLE" ]; then
         echo "WARNING: .env.example not found. Creating empty .env file."
-        touch .env
+        touch "$ENV_FILE"
         echo "Created empty .env file."
     else
-        cp .env.example .env
+        cp "$ENV_EXAMPLE" "$ENV_FILE"
         echo "Created .env from .env.example"
     fi
 else
@@ -109,13 +120,14 @@ else
 fi
 
 # Load environment variables from .env (only if file exists and is readable)
-if [ -f .env ] && [ -r .env ]; then
+ENV_FILE="$SCRIPT_DIR/.env"
+if [ -f "$ENV_FILE" ] && [ -r "$ENV_FILE" ]; then
     set -a
-    # Use . instead of source for sh compatibility
-    . .env
+    # Use . instead of source for sh compatibility, with absolute path
+    . "$ENV_FILE"
     set +a
 else
-    echo "WARNING: .env file not found or not readable. Continuing without loading environment variables."
+    echo "WARNING: .env file not found or not readable at $ENV_FILE. Continuing without loading environment variables."
 fi
 
 # 0.1. Update repository with git pull
