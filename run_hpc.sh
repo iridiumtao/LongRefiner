@@ -80,6 +80,10 @@ main_execution() {
     echo "===== Execution Complete ====="
 }
 
+# Change to the script's directory to ensure relative paths work correctly
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 # Check if we're already inside Singularity
 INSIDE_SINGULARITY=false
 if [ -n "$SINGULARITY_NAME" ] || [ -n "$APPTAINER_NAME" ]; then
@@ -137,11 +141,10 @@ if [ "$INSIDE_SINGULARITY" = "false" ] && [ -n "$SINGULARITY_BASH_PATH" ]; then
     echo "Step 0.2: Executing in Singularity environment..."
     echo "-------------------------------------------"
     if [ -f "$SINGULARITY_BASH_PATH" ]; then
-        # Get the absolute path of this script
-        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        # Use the SCRIPT_DIR already defined at the top of the script
         SCRIPT_PATH="$SCRIPT_DIR/$(basename "${BASH_SOURCE[0]}")"
-        # Execute this script inside Singularity
-        bash "$SINGULARITY_BASH_PATH" -c "cd '$PWD' && bash '$SCRIPT_PATH'"
+        # Execute this script inside Singularity, ensuring we're in the script's directory
+        bash "$SINGULARITY_BASH_PATH" -c "cd '$SCRIPT_DIR' && bash '$SCRIPT_PATH'"
     else
         echo "ERROR: Singularity bash script not found at $SINGULARITY_BASH_PATH"
         exit 1
