@@ -108,27 +108,22 @@ set -a
 . .env
 set +a
 
-# 0.1. Clone repository if needed
-if [ -n "$GH_PATH" ]; then
-    echo -n "Step 0.1: Cloning repository... "
-    REPO_NAME=$(basename "$GH_PATH" .git)
-    if [ -d "$REPO_NAME" ]; then
-        echo "Repository $REPO_NAME already exists, skipping clone."
-        # Change to the existing directory
-        cd "$REPO_NAME"
-    else
-        if [ -n "$GH_BRANCH" ]; then
-            git clone -b "$GH_BRANCH" "$GH_PATH"
-            echo "Cloned $GH_PATH (branch: $GH_BRANCH)"
-        else
-            git clone "$GH_PATH"
-            echo "Cloned $GH_PATH"
+# 0.1. Update repository with git pull
+echo -n "Step 0.1: Updating repository... "
+if [ -d ".git" ]; then
+    # Check if a specific branch is requested
+    if [ -n "$GH_BRANCH" ]; then
+        CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+        if [ "$CURRENT_BRANCH" != "$GH_BRANCH" ]; then
+            echo "Switching to branch $GH_BRANCH..."
+            git checkout "$GH_BRANCH" 2>/dev/null || git checkout -b "$GH_BRANCH" 2>/dev/null || echo "Warning: Could not switch to branch $GH_BRANCH"
         fi
-        # Change to the cloned directory
-        cd "$REPO_NAME"
     fi
+    # Pull latest changes
+    git pull
+    echo "Repository updated."
 else
-    echo "Step 0.1: GH_PATH not set, skipping repository clone."
+    echo "Not a git repository, skipping update."
 fi
 
 # 0.2. Execute Singularity bash if specified and not already inside Singularity
