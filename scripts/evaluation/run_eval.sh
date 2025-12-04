@@ -76,7 +76,7 @@ echo "Running evaluation: ${EXPERIMENT_TYPE}"
 echo "Dataset: ${DATASET_NAME}"
 echo "=============================================="
 
-python run_eval.py \
+uv run python scripts/evaluation/run_eval.py \
     --dataset_name "${DATASET_NAME}" \
     --split "${SPLIT}" \
     --retrieval_result_path "${RETRIEVAL_RESULT}" \
