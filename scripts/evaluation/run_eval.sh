@@ -1,85 +1,101 @@
 #!/bin/bash
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 
-# --- experiment variant ---
+# =============================================================================
+# Experiment Configuration
+# =============================================================================
 # Options:
 #   base     : original LongRefiner teacher (HF checkpoints, 3B)
-#   lora     : student LoRA models (step1/2/3_model on Qwen-0.5B)
-#   qlora    : student QLoRA models (step1/2/3_model_qlora on Qwen-0.5B)
-#   lora_ptq : student LoRA models with post-training quantization
+#   lora     : student LoRA models (Qwen-0.5B)
+#   qlora    : student QLoRA models (Qwen-0.5B)
+#   lora_ptq : student LoRA + PTQ models
 EXPERIMENT_TYPE="base"
 
 # --- wandb settings ---
 WANDB_PROJECT="LongRefiner_Evaluation"
-WANDB_ENABLED="--wandb_enabled"  # Comment out to disable wandb
+WANDB_ENABLED="--wandb_enabled"  # Comment out to disable: WANDB_ENABLED=""
 
-# set datasets
-DATASET_NAME="nq"
+# --- Dataset settings ---
+DATASET_NAME="hotpotqa"
 SPLIT="test"
+TEST_SAMPLE_NUM=1000
 
-# set generator model path
-GENERATOR_MODEL="llama3.1-8B-instruct"
+# --- Retrieval results (must contain questions, docs, and answers) ---
+RETRIEVAL_RESULT="eval_data/hotpotqa_eval_1k_retrieval_result.json"
+
+# --- Generator model ---
 GENERATOR_MODEL_PATH="meta-llama/Llama-3.1-8B-Instruct"
+MAX_TOKENS=512
+GPU_MEMORY_UTILIZATION=0.85
+TENSOR_PARALLEL_SIZE=1  # Number of GPUs for generator
 
-# set refiner model & module paths based on experiment type
+# =============================================================================
+# Refiner Model Configuration (based on experiment type)
+# =============================================================================
 if [ "${EXPERIMENT_TYPE}" = "base" ]; then
-  # Teacher: original LongRefiner 3B LoRA (HF checkpoints)
-  BASE_REFINER_MODEL_PATH="Qwen/Qwen2.5-3B-Instruct"
-  QUERY_ANALYSIS_MODULE="jinjiajie/Query-Analysis-Qwen2.5-3B-Instruct"
-  DOC_STRUCTURING_MODULE="jinjiajie/Doc-Structuring-Qwen2.5-3B-Instruct"
-  GLOBAL_SELECTION_MODULE="jinjiajie/Global-Selection-Qwen2.5-3B-Instruct"
+    # Teacher: original LongRefiner 3B LoRA (HF checkpoints)
+    BASE_REFINER_MODEL_PATH="Qwen/Qwen2.5-3B-Instruct"
+    QUERY_ANALYSIS_MODULE="jinjiajie/Query-Analysis-Qwen2.5-3B-Instruct"
+    DOC_STRUCTURING_MODULE="jinjiajie/Doc-Structuring-Qwen2.5-3B-Instruct"
+    GLOBAL_SELECTION_MODULE="jinjiajie/Global-Selection-Qwen2.5-3B-Instruct"
 elif [ "${EXPERIMENT_TYPE}" = "lora" ]; then
-  # Student: Qwen-0.5B + LoRA adapters
-  BASE_REFINER_MODEL_PATH="model/Qwen2.5-0.5B-Instruct"
-  QUERY_ANALYSIS_MODULE="model/step1_model"
-  DOC_STRUCTURING_MODULE="model/step2_model"
-  GLOBAL_SELECTION_MODULE="model/step3_model"
+    # Student: Qwen-0.5B + LoRA adapters
+    BASE_REFINER_MODEL_PATH="model/Qwen2.5-0.5B-Instruct"
+    QUERY_ANALYSIS_MODULE="model/step1_model"
+    DOC_STRUCTURING_MODULE="model/step2_model"
+    GLOBAL_SELECTION_MODULE="model/step3_model"
 elif [ "${EXPERIMENT_TYPE}" = "qlora" ]; then
-  # Student: Qwen-0.5B + QLoRA adapters
-  BASE_REFINER_MODEL_PATH="model/Qwen2.5-0.5B-Instruct"
-  QUERY_ANALYSIS_MODULE="model/step1_model_qlora"
-  DOC_STRUCTURING_MODULE="model/step2_model_qlora"
-  GLOBAL_SELECTION_MODULE="model/step3_model_qlora"
+    # Student: Qwen-0.5B + QLoRA adapters
+    BASE_REFINER_MODEL_PATH="model/Qwen2.5-0.5B-Instruct"
+    QUERY_ANALYSIS_MODULE="model/step1_model_qlora"
+    DOC_STRUCTURING_MODULE="model/step2_model_qlora"
+    GLOBAL_SELECTION_MODULE="model/step3_model_qlora"
 elif [ "${EXPERIMENT_TYPE}" = "lora_ptq" ]; then
-  # Student: Qwen-0.5B + LoRA adapters with PTQ (int8/int4)
-  BASE_REFINER_MODEL_PATH="model/Qwen2.5-0.5B-Instruct"
-  QUERY_ANALYSIS_MODULE="model/step1_model_ptq"
-  DOC_STRUCTURING_MODULE="model/step2_model_ptq"
-  GLOBAL_SELECTION_MODULE="model/step3_model_ptq"
+    # Student: Qwen-0.5B + LoRA + PTQ
+    BASE_REFINER_MODEL_PATH="model/Qwen2.5-0.5B-Instruct"
+    QUERY_ANALYSIS_MODULE="model/step1_model_ptq"
+    DOC_STRUCTURING_MODULE="model/step2_model_ptq"
+    GLOBAL_SELECTION_MODULE="model/step3_model_ptq"
 else
-  echo "Unknown EXPERIMENT_TYPE: ${EXPERIMENT_TYPE}. Please use 'base', 'lora', 'qlora', or 'lora_ptq'."
-  exit 1
+    echo "Unknown EXPERIMENT_TYPE: ${EXPERIMENT_TYPE}"
+    echo "Please use: base, lora, qlora, or lora_ptq"
+    exit 1
 fi
+
 SCORE_MODEL="bge-reranker-v2-m3"
 SCORE_MODEL_PATH="BAAI/bge-reranker-v2-m3"
 
-# set save directory
+# --- Output directory ---
 SAVE_DIR="results/"
 
-# set retrieval result
-RETRIEVAL_RESULT="eval_data/hotpotqa_eval_1k_retrieval_result.json"
+# =============================================================================
+# Run Evaluation
+# =============================================================================
+echo "=============================================="
+echo "Running evaluation: ${EXPERIMENT_TYPE}"
+echo "Dataset: ${DATASET_NAME}"
+echo "=============================================="
 
-# run script
-uv run scripts/evaluation/run_eval.py \
-    --dataset_name ${DATASET_NAME} \
-    --split ${SPLIT} \
-    --generator_model ${GENERATOR_MODEL} \
-    --generator_model_path ${GENERATOR_MODEL_PATH} \
-    --base_refiner_model_path ${BASE_REFINER_MODEL_PATH} \
-    --query_analysis_module_lora_path ${QUERY_ANALYSIS_MODULE} \
-    --doc_structuring_module_lora_path ${DOC_STRUCTURING_MODULE} \
-    --global_selection_module_lora_path ${GLOBAL_SELECTION_MODULE} \
-    --score_model_name ${SCORE_MODEL} \
-    --score_model_path ${SCORE_MODEL_PATH} \
-    --gpu_id "0,1,2,3,4,5,6,7" \
-    --save_dir ${SAVE_DIR} \
-    --retrieval_result_path ${RETRIEVAL_RESULT} \
-    --framework "vllm" \
-    --gpu_memory_utilization 0.85 \
-    --generator_max_input_len 15000 \
-    --max_tokens 512 \
-    --test_sample_num 1000 \
-    --save_note "${EXPERIMENT_TYPE}_experiment" \
-    --experiment_type ${EXPERIMENT_TYPE} \
-    --wandb_project ${WANDB_PROJECT} \
+python scripts/evaluation/run_eval.py \
+    --dataset_name "${DATASET_NAME}" \
+    --split "${SPLIT}" \
+    --retrieval_result_path "${RETRIEVAL_RESULT}" \
+    --test_sample_num ${TEST_SAMPLE_NUM} \
+    --generator_model_path "${GENERATOR_MODEL_PATH}" \
+    --max_tokens ${MAX_TOKENS} \
+    --gpu_memory_utilization ${GPU_MEMORY_UTILIZATION} \
+    --tensor_parallel_size ${TENSOR_PARALLEL_SIZE} \
+    --base_refiner_model_path "${BASE_REFINER_MODEL_PATH}" \
+    --query_analysis_module_lora_path "${QUERY_ANALYSIS_MODULE}" \
+    --doc_structuring_module_lora_path "${DOC_STRUCTURING_MODULE}" \
+    --global_selection_module_lora_path "${GLOBAL_SELECTION_MODULE}" \
+    --score_model_name "${SCORE_MODEL}" \
+    --score_model_path "${SCORE_MODEL_PATH}" \
+    --save_dir "${SAVE_DIR}" \
+    --experiment_type "${EXPERIMENT_TYPE}" \
+    --wandb_project "${WANDB_PROJECT}" \
     ${WANDB_ENABLED}
+
+echo "=============================================="
+echo "Evaluation completed!"
+echo "=============================================="

@@ -31,10 +31,9 @@ dependencies = [
     "torchvision",
     "torchaudio",
     "tiktoken",
-    "flashrag-dev[full]",
+    "datasets",  # HuggingFace datasets (replaces flashrag-dev)
     "sentencepiece",
     "wandb",
-    "pyyaml",
 ]
 
 [project.urls]
