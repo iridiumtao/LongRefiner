@@ -84,7 +84,7 @@ def parse_args():
     parser.add_argument(
         "--retrieval_result_path",
         type=str,
-        default="sample_docs.json",
+        default="eval_data/hotpotqa_eval_1k_retrieval_result.json",
         help="Path to the all docs file",
     )
     parser.add_argument(
@@ -115,21 +115,6 @@ def parse_args():
         "--save_note", type=str, default="", help="Note to save with results"
     )
 
-    # --- New arguments for wandb and experiment tracking ---
-    parser.add_argument(
-        "--model_variant",
-        type=str,
-        default="A",
-        choices=["A", "B", "C"],
-        help="Model variant: A (Full LoRA), B (LoRA+PTQ), C (QLoRA)",
-    )
-    parser.add_argument(
-        "--quantization_strategy",
-        type=str,
-        default="none",
-        choices=["none", "int8", "int4", "nf4"],
-        help="Quantization strategy used",
-    )
     parser.add_argument(
         "--wandb_project",
         type=str,
@@ -189,12 +174,6 @@ def get_model_size_gb(checkpoint_path: str) -> float:
     return total_size / (1024**3)  # Convert to GB
 
 
-def get_variant_name(variant: str) -> str:
-    """Get descriptive name for model variant"""
-    variant_names = {"A": "Full_LoRA_Baseline", "B": "LoRA_PTQ", "C": "QLoRA"}
-    return variant_names.get(variant, variant)
-
-
 def run(args):
     """Run evaluation pipeline"""
 
@@ -204,16 +183,13 @@ def run(args):
         wandb.init(
             project=args.wandb_project,
             job_type="evaluation",
-            name=f"{get_variant_name(args.model_variant)}_{args.dataset_name}_{args.quantization_strategy}",
+            name=f"evaluation_{args.dataset_name}",
             mode=wandb_mode,
         )
 
         # Log experiment configuration
         wandb_config = {
             # Experiment settings
-            "model_variant": args.model_variant,
-            "model_variant_name": get_variant_name(args.model_variant),
-            "quantization_strategy": args.quantization_strategy,
             "dataset_name": args.dataset_name,
             "split": args.split,
             "test_sample_num": args.test_sample_num,
@@ -386,8 +362,6 @@ def run(args):
                 # Task metrics summary
                 **{k.replace("task/", "final/"): v for k, v in task_metrics.items()},
                 # Experiment info
-                "model_variant": args.model_variant,
-                "quantization_strategy": args.quantization_strategy,
                 "dataset_name": args.dataset_name,
                 "num_samples": num_samples,
             }
@@ -398,19 +372,15 @@ def run(args):
 
         # Save results as artifact
         result_artifact = wandb.Artifact(
-            name=f"eval_result_{args.model_variant}_{args.dataset_name}",
+            name=f"eval_result_{args.dataset_name}",
             type="evaluation_result",
             metadata={
-                "model_variant": args.model_variant,
-                "quantization_strategy": args.quantization_strategy,
                 "dataset_name": args.dataset_name,
             },
         )
 
         # Save detailed results to file
-        result_file = os.path.join(
-            args.save_dir, f"eval_result_{args.model_variant}_{args.dataset_name}.json"
-        )
+        result_file = os.path.join(args.save_dir, f"eval_result_{args.dataset_name}.json")
         os.makedirs(args.save_dir, exist_ok=True)
         with open(result_file, "w", encoding="utf-8") as f:
             json.dump(
@@ -442,8 +412,6 @@ def run(args):
     print("\n" + "=" * 50)
     print("EVALUATION SUMMARY")
     print("=" * 50)
-    print(f"Model Variant: {get_variant_name(args.model_variant)}")
-    print(f"Quantization: {args.quantization_strategy}")
     print(f"Dataset: {args.dataset_name}")
     print(f"Samples: {num_samples}")
     print("-" * 50)

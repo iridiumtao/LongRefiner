@@ -1,9 +1,12 @@
 #!/bin/bash
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 
-# --- Experiment settings ---
-MODEL_VARIANT="A"  # A: Full LoRA, B: LoRA+PTQ, C: QLoRA
-QUANTIZATION_STRATEGY="none"  # none, int8, int4, nf4
+# --- experiment variant ---
+# Options:
+#   base  : original LongRefiner teacher (HF checkpoints, 3B)
+#   lora  : student LoRA models (step1/2/3_model on Qwen-0.5B)
+#   qlora : student QLoRA models (step1/2/3_model_qlora on Qwen-0.5B)
+EXPERIMENT_TYPE="base"
 
 # --- wandb settings ---
 WANDB_PROJECT="LongRefiner_Evaluation"
@@ -17,11 +20,29 @@ SPLIT="test"
 GENERATOR_MODEL="llama3.1-8B-instruct"
 GENERATOR_MODEL_PATH="meta-llama/Llama-3.1-8B-Instruct"
 
-# set refiner model path
-BASE_REFINER_MODEL_PATH="Qwen/Qwen2.5-3B-Instruct"
-QUERY_ANALYSIS_MODULE="jinjiajie/Query-Analysis-Qwen2.5-3B-Instruct"
-DOC_STRUCTURING_MODULE="jinjiajie/Doc-Structuring-Qwen2.5-3B-Instruct"
-GLOBAL_SELECTION_MODULE="jinjiajie/Global-Selection-Qwen2.5-3B-Instruct"
+# set refiner model & module paths based on experiment type
+if [ "${EXPERIMENT_TYPE}" = "base" ]; then
+  # Teacher: original LongRefiner 3B LoRA (HF checkpoints)
+  BASE_REFINER_MODEL_PATH="Qwen/Qwen2.5-3B-Instruct"
+  QUERY_ANALYSIS_MODULE="jinjiajie/Query-Analysis-Qwen2.5-3B-Instruct"
+  DOC_STRUCTURING_MODULE="jinjiajie/Doc-Structuring-Qwen2.5-3B-Instruct"
+  GLOBAL_SELECTION_MODULE="jinjiajie/Global-Selection-Qwen2.5-3B-Instruct"
+elif [ "${EXPERIMENT_TYPE}" = "lora" ]; then
+  # Student: Qwen-0.5B + LoRA adapters
+  BASE_REFINER_MODEL_PATH="model/Qwen2.5-0.5B-Instruct"
+  QUERY_ANALYSIS_MODULE="model/step1_model"
+  DOC_STRUCTURING_MODULE="model/step2_model"
+  GLOBAL_SELECTION_MODULE="model/step3_model"
+elif [ "${EXPERIMENT_TYPE}" = "qlora" ]; then
+  # Student: Qwen-0.5B + QLoRA adapters
+  BASE_REFINER_MODEL_PATH="model/Qwen2.5-0.5B-Instruct"
+  QUERY_ANALYSIS_MODULE="model/step1_model_qlora"
+  DOC_STRUCTURING_MODULE="model/step2_model_qlora"
+  GLOBAL_SELECTION_MODULE="model/step3_model_qlora"
+else
+  echo "Unknown EXPERIMENT_TYPE: ${EXPERIMENT_TYPE}. Please use 'base', 'lora', or 'qlora'."
+  exit 1
+fi
 SCORE_MODEL="bge-reranker-v2-m3"
 SCORE_MODEL_PATH="BAAI/bge-reranker-v2-m3"
 
@@ -29,7 +50,7 @@ SCORE_MODEL_PATH="BAAI/bge-reranker-v2-m3"
 SAVE_DIR="results/"
 
 # set retrieval result
-RETRIEVAL_RESULT="sample_docs.json"
+RETRIEVAL_RESULT="eval_data/hotpotqa_eval_1k_retrieval_result.json"
 
 # run script
 python scripts/evaluation/run_eval.py \
@@ -51,8 +72,6 @@ python scripts/evaluation/run_eval.py \
     --generator_max_input_len 15000 \
     --max_tokens 512 \
     --test_sample_num 1000 \
-    --save_note "test_experiment" \
-    --model_variant ${MODEL_VARIANT} \
-    --quantization_strategy ${QUANTIZATION_STRATEGY} \
+    --save_note "${EXPERIMENT_TYPE}_experiment" \
     --wandb_project ${WANDB_PROJECT} \
     ${WANDB_ENABLED}
