@@ -33,7 +33,8 @@ dependencies = [
     "tiktoken",
     "flashrag-dev",
     "sentencepiece",
-    "wandb"
+    "wandb",
+    "pyyaml",
 ]
 
 [project.urls]
