@@ -31,7 +31,7 @@ dependencies = [
     "torchvision",
     "torchaudio",
     "tiktoken",
-    "flashrag-dev",
+    "flashrag-dev[full]",
     "sentencepiece",
     "wandb",
     "pyyaml",
