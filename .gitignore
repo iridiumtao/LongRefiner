@@ -22,3 +22,5 @@ model/*
 
 data_and_model.zip
 eval_data/
+results/
+.DS_Store

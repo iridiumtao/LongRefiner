@@ -31,14 +31,21 @@ dependencies = [
     "torchvision",
     "torchaudio",
     "tiktoken",
-    "datasets",  # HuggingFace datasets (replaces flashrag-dev)
+    "datasets",  # HuggingFace datasets
     "sentencepiece",
     "wandb",
+    "flashrag-dev",  # Official evaluation framework (pre-release)
 ]
 
 [project.urls]
 Homepage = "https://github.com/iridiumtao/LongRefiner"
 Repository = "https://github.com/iridiumtao/LongRefiner"
+"Bug Tracker" = "https://github.com/iridiumtao/LongRefiner/issues"
+Documentation = "https://github.com/iridiumtao/LongRefiner#readme"
+
+[tool.uv]
+# Allow pre-release versions for flashrag-dev
+prerelease = "allow"
 
 [tool.uv.sources]
 torch = [

@@ -69,12 +69,13 @@ echo "Running evaluation: ${EXPERIMENT_TYPE}"
 echo "Dataset: ${DATASET_NAME}"
 echo "=============================================="
 
-uv run python scripts/evaluation/run_eval.py \
+uv run python scripts/evaluation/run_eval_flashrag.py \
     --dataset_name "${DATASET_NAME}" \
     --split "${SPLIT}" \
     --retrieval_result_path "${RETRIEVAL_RESULT}" \
     --test_sample_num ${TEST_SAMPLE_NUM} \
     --generator_model_path "${GENERATOR_MODEL_PATH}" \
+    --framework "vllm" \
     --max_tokens ${MAX_TOKENS} \
     --gpu_memory_utilization ${GPU_MEMORY_UTILIZATION} \
     --tensor_parallel_size ${TENSOR_PARALLEL_SIZE} \
@@ -86,8 +87,7 @@ uv run python scripts/evaluation/run_eval.py \
     --score_model_path "${SCORE_MODEL_PATH}" \
     --save_dir "${SAVE_DIR}" \
     --experiment_type "${EXPERIMENT_TYPE}" \
-    --wandb_project "${WANDB_PROJECT}" \
-    ${WANDB_ENABLED}
+    --save_note "${EXPERIMENT_TYPE}"
 
 echo "=============================================="
 echo "Evaluation completed!"

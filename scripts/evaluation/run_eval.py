@@ -221,13 +221,15 @@ Response: """
 def format_prompt_optimized(question: str, documents: List, tokenizer, dataset_name: str = "hotpotqa") -> str:
     """
     Use tokenizer's apply_chat_template for proper formatting.
-    Copied from longrefiner/prompt_template.py
+    
+    UPDATED: Now uses OFFICIAL prompts from LongRefiner paper (arXiv:2505.10413)
+    Reference: Appendix D, Prompt C.1 and C.2
     
     Args:
         question: The question to answer
         documents: List of documents (str or dict)
         tokenizer: Tokenizer with apply_chat_template method
-        dataset_name: Dataset name (for potential future customization)
+        dataset_name: Dataset name (for prompt customization)
         
     Returns:
         str: Formatted prompt with proper chat template
@@ -237,18 +239,39 @@ def format_prompt_optimized(question: str, documents: List, tokenizer, dataset_n
         formatted_docs = []
         for i, doc in enumerate(documents):
             content = doc if isinstance(doc, str) else doc.get('content', doc.get('text', str(doc)))
-            formatted_docs.append(f"Document [{i+1}]: {content}")
-        context_str = "\n\n".join(formatted_docs)
+            formatted_docs.append(f"Doc {i+1}: {content}")
+        context_str = "\n".join(formatted_docs)
     else:
         context_str = str(documents)
 
-    # From longrefiner/prompt_template.py
-    system_instruction = (
-        "Answer the question based on the given document."
-        "Only give me the answer and do not output any other words."
-        f"\nThe following are given documents.\n\n{context_str}"
-    )
-    user_input = f"Question: {question}"
+    # Use OFFICIAL prompts from LongRefiner paper (Appendix D)
+    if dataset_name not in ["eli5", "asqa"]:
+        # Short-form QA (NQ, HotpotQA, TriviaQA, etc.) - Prompt C.1
+        system_instruction = (
+            "Find the useful content from the provided documents, then answer the question. "
+            "Answer the question directly. Your response should be very concise. "
+            "Please provide use 'So the final answer is:' as a prefix for the final answer."
+            "\nOutput format:\n"
+            "Question: What is the capital of France?\n"
+            "Response:The capital city of France is Paris.So the final answer is: Paris."
+            f"\n\nThe following are given documents.\n\n{context_str}"
+        )
+        user_input = (
+            "Answer the question directly. Your response should be very concise. "
+            "Please provide use 'So the final answer is:' as a prefix for the final answer.\n"
+            f"Question: {question}\nResponse: "
+        )
+    else:
+        # Long-form QA (ELI5, ASQA) - Prompt C.2
+        system_instruction = (
+            "Find the useful content from the provided documents, then answer the question. "
+            "Answer the question directly. Your response should be very detailed."
+            f"\n\nThe following are given documents.\n\n{context_str}"
+        )
+        user_input = (
+            "Answer the question directly. Your response should be very detailed.\n"
+            f"Question: {question}\nResponse: "
+        )
 
     messages = [
         {"role": "system", "content": system_instruction},
@@ -481,10 +504,13 @@ def parse_args():
     parser.add_argument("--test_sample_num", type=int, default=1000, help="Number of test samples")
     
     # Generator model settings
+    parser.add_argument("--generator_model", type=str, default="llama3.1-8B-instruct", help="Name of generator model (FlashRAG)")
     parser.add_argument("--generator_model_path", type=str, default="meta-llama/Llama-3.1-8B-Instruct")
+    parser.add_argument("--framework", type=str, default="vllm", help="Framework to use (vllm, hf)")
     parser.add_argument("--max_tokens", type=int, default=512, help="Max tokens to generate")
     parser.add_argument("--gpu_memory_utilization", type=float, default=0.5)
     parser.add_argument("--tensor_parallel_size", type=int, default=1, help="Number of GPUs for tensor parallelism")
+    parser.add_argument("--generator_max_input_len", type=int, default=15000, help="Maximum input length for generator")
     
     # Refiner model settings
     parser.add_argument("--base_refiner_model_path", type=str, default="Qwen/Qwen2.5-3B-Instruct")
@@ -496,6 +522,8 @@ def parse_args():
     
     # Output settings
     parser.add_argument("--save_dir", type=str, default="results/")
+    parser.add_argument("--save_note", type=str, default="", help="Note to save with results")
+    parser.add_argument("--gpu_id", type=str, default="0", help="GPU IDs to use")
     
     # Experiment tracking
     parser.add_argument("--experiment_type", type=str, default="base", choices=["base", "lora", "qlora", "lora_ptq"])
