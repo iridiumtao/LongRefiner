@@ -368,19 +368,6 @@ def run(args):
         max_model_len=25000,
     )
     
-    # Initialize vLLM generator
-    print("Loading vLLM generator...")
-    generator = LLM(
-        model=args.generator_model_path,
-        gpu_memory_utilization=args.gpu_memory_utilization,
-        tensor_parallel_size=args.tensor_parallel_size,
-        trust_remote_code=True,
-    )
-    sampling_params = SamplingParams(
-        max_tokens=args.max_tokens,
-        temperature=0.0,  # Greedy decoding for evaluation
-    )
-    
     init_time = time.time() - init_start_time
     print(f"Component initialization completed in {init_time:.2f} seconds")
     
@@ -401,6 +388,29 @@ def run(args):
     refined_results = refiner.batch_run(questions, retrieval_docs, budget=2048)
     refiner_time = time.time() - refiner_start_time
     print(f"Refiner completed in {refiner_time:.2f} seconds")
+    
+    # Shutdown refiner to free GPU memory before loading generator
+    print("Shutting down refiner to free GPU memory...")
+    import gc
+    refiner.shutdown()
+    del refiner
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+    
+    # Initialize vLLM generator (after refiner shutdown)
+    print("Loading vLLM generator...")
+    generator = LLM(
+        model=args.generator_model_path,
+        gpu_memory_utilization=args.gpu_memory_utilization,
+        tensor_parallel_size=args.tensor_parallel_size,
+        trust_remote_code=True,
+    )
+    sampling_params = SamplingParams(
+        max_tokens=args.max_tokens,
+        temperature=0.0,  # Greedy decoding for evaluation
+    )
     
     # --- Format prompts ---
     print("Formatting prompts...")
