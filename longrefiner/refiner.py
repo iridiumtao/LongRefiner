@@ -195,9 +195,10 @@ class LongRefiner:
 
     def shutdown(self):
         """
-        Properly shutdown the vLLM engine and clean up resources.
+        Properly shutdown the vLLM engine, score model, and clean up all GPU resources.
         This should be called when done using the LongRefiner instance.
         """
+        # Clean up vLLM model
         if hasattr(self, 'model') and self.model is not None:
             try:
                 # vLLM's LLM object cleanup - try multiple methods
@@ -217,6 +218,21 @@ class LongRefiner:
                 print(f"Warning: Error during vLLM engine shutdown: {e}")
             finally:
                 self.model = None
+        
+        # Clean up score model (loaded on CUDA in _load_score_model)
+        if hasattr(self, 'score_model') and self.score_model is not None:
+            try:
+                self.score_model.cpu()  # Move to CPU first to free GPU memory
+                del self.score_model
+                self.score_model = None
+            except Exception as e:
+                print(f"Warning: Error during score model cleanup: {e}")
+        
+        # Clean up tokenizers
+        if hasattr(self, 'tokenizer'):
+            self.tokenizer = None
+        if hasattr(self, 'score_tokenizer'):
+            self.score_tokenizer = None
 
     def __del__(self):
         """

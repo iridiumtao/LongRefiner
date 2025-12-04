@@ -303,7 +303,7 @@ def parse_args():
     # Generator model settings
     parser.add_argument("--generator_model_path", type=str, default="meta-llama/Llama-3.1-8B-Instruct")
     parser.add_argument("--max_tokens", type=int, default=512, help="Max tokens to generate")
-    parser.add_argument("--gpu_memory_utilization", type=float, default=0.85)
+    parser.add_argument("--gpu_memory_utilization", type=float, default=0.5)
     parser.add_argument("--tensor_parallel_size", type=int, default=1, help="Number of GPUs for tensor parallelism")
     
     # Refiner model settings
