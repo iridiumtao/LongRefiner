@@ -218,22 +218,21 @@ Response: """
     return prompt
 
 
-def format_prompt_optimized(question: str, documents: List, dataset_name: str = "hotpotqa", tokenizer=None) -> str:
+def format_prompt_optimized(question: str, documents: List, tokenizer, dataset_name: str = "hotpotqa") -> str:
     """
     Use tokenizer's apply_chat_template for proper formatting.
-    Inspired by longrefiner/prompt_template.py
+    Copied from longrefiner/prompt_template.py
     
     Args:
         question: The question to answer
         documents: List of documents (str or dict)
+        tokenizer: Tokenizer with apply_chat_template method
         dataset_name: Dataset name (for potential future customization)
-        tokenizer: Optional tokenizer for apply_chat_template
         
     Returns:
         str: Formatted prompt with proper chat template
     """
-    # --- 1. Build document context ---
-    context_str = ""
+    # Build document context
     if isinstance(documents, list):
         formatted_docs = []
         for i, doc in enumerate(documents):
@@ -243,36 +242,20 @@ def format_prompt_optimized(question: str, documents: List, dataset_name: str = 
     else:
         context_str = str(documents)
 
-    # Copy from longrefiner/prompt_template.py
+    # From longrefiner/prompt_template.py
     system_instruction = (
         "Answer the question based on the given document."
         "Only give me the answer and do not output any other words."
         f"\nThe following are given documents.\n\n{context_str}"
     )
-    
     user_input = f"Question: {question}"
 
-    # --- 4. Build messages list ---
     messages = [
         {"role": "system", "content": system_instruction},
         {"role": "user", "content": user_input}
     ]
     
-    # --- 5. Apply chat template (if tokenizer available) ---
-    if tokenizer is not None:
-        try:
-            prompt = tokenizer.apply_chat_template(
-                messages, 
-                tokenize=False, 
-                add_generation_prompt=True
-            )
-            return prompt
-        except Exception as e:
-            print(f"Warning: apply_chat_template failed: {e}. Falling back to simple format.")
-    
-    # --- 6. Fallback: simple format (like original format_prompt) ---
-    prompt = f"{system_instruction}\n\n{user_input}\n\nResponse: "
-    return prompt
+    return tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
 
 def extract_answer(response: str) -> str:
@@ -369,72 +352,6 @@ def extract_answer_robust(response: str) -> str:
     return clean_text[:50].strip()
 
 
-# =============================================================================
-# Data Loading
-# =============================================================================
-
-def load_ground_truth_from_hf(dataset_name: str, split: str) -> Dict[str, List[str]]:
-    """
-    Load ground truth answers from HuggingFace datasets.
-    
-    Returns:
-        Dictionary mapping question -> list of acceptable answers
-    """
-    print(f"Loading ground truth from HuggingFace: {dataset_name} ({split})...")
-    
-    question_to_answers = {}
-    
-    try:
-        if dataset_name.lower() == "hotpotqa":
-            # HotpotQA dataset
-            dataset = load_dataset("hotpot_qa", "fullwiki", split=split, trust_remote_code=True)
-            for item in dataset:
-                q = item["question"]
-                ans = item["answer"]
-                question_to_answers[q] = [ans] if isinstance(ans, str) else ans
-                
-        elif dataset_name.lower() == "nq":
-            # Natural Questions
-            dataset = load_dataset("google-research-datasets/natural_questions", split=split)
-            for item in dataset:
-                q = item["question"]["text"]
-                # NQ has short_answers and long_answers
-                answers = []
-                for ann in item["annotations"]:
-                    for sa in ann["short_answers"]:
-                        if sa["start_token"] != -1:
-                            answers.append(sa["text"])
-                if answers:
-                    question_to_answers[q] = answers
-                    
-        elif dataset_name.lower() == "triviaqa":
-            # TriviaQA
-            dataset = load_dataset("trivia_qa", "rc", split=split)
-            for item in dataset:
-                q = item["question"]
-                ans = item["answer"]["value"]
-                aliases = item["answer"].get("aliases", [])
-                question_to_answers[q] = [ans] + aliases
-                
-        elif dataset_name.lower() == "squad":
-            # SQuAD
-            dataset = load_dataset("squad", split=split)
-            for item in dataset:
-                q = item["question"]
-                answers = item["answers"]["text"]
-                question_to_answers[q] = answers
-                
-        else:
-            print(f"Warning: Unknown dataset {dataset_name}, ground truth not loaded from HF")
-            
-    except Exception as e:
-        print(f"Warning: Could not load ground truth from HuggingFace: {e}")
-        print("Will try to find answers in retrieval result file...")
-    
-    print(f"Loaded {len(question_to_answers)} ground truth answers from HuggingFace")
-    return question_to_answers
-
-
 def load_eval_data(
     dataset_name: str,
     split: str,
@@ -481,8 +398,7 @@ def load_eval_data(
     # Load ground truth from HuggingFace as fallback
     hf_ground_truth = {}
     if not local_ground_truth:
-        print("Attempting to load ground truth from HuggingFace as fallback...")
-        hf_ground_truth = load_ground_truth_from_hf(dataset_name, split)
+        print("ERROR: No local ground truth found")
     
     questions = []
     ground_truths = []
@@ -672,40 +588,28 @@ def run(args):
         trust_remote_code=True,
     )
     
-    # Get tokenizer for proper chat template formatting
-    try:
-        from transformers import AutoTokenizer
-        generator_tokenizer = AutoTokenizer.from_pretrained(args.generator_model_path, trust_remote_code=True)
-        print(f"✓ Loaded tokenizer for chat template formatting")
-    except Exception as e:
-        print(f"⚠️  Could not load tokenizer: {e}")
-        generator_tokenizer = None
+    # Get tokenizer for chat template formatting
+    from transformers import AutoTokenizer
+    generator_tokenizer = AutoTokenizer.from_pretrained(args.generator_model_path, trust_remote_code=True)
+    print(f"✓ Loaded tokenizer")
     
     # Llama-3 special token IDs for proper stopping
     stop_token_ids = [128001, 128009]  # <|end_of_text|>, <|eot_id|>
     
     sampling_params = SamplingParams(
-        max_tokens=1024,  # Increased to prevent truncation
-        temperature=0.0,  # Greedy decoding for evaluation reproducibility
-        repetition_penalty=1.1,  # Prevent infinite loops
-        stop_token_ids=stop_token_ids,  # Ensure proper stopping
-        skip_special_tokens=True,  # Clean output
+        max_tokens=1024,
+        temperature=0.0,
+        repetition_penalty=1.1,
+        stop_token_ids=stop_token_ids,
+        skip_special_tokens=True,
     )
     
-    # --- Format prompts ---
-    # Use optimized prompt with tokenizer if available
-    if generator_tokenizer is not None:
-        print("Formatting prompts with optimized template (using tokenizer.apply_chat_template)...")
-        prompts = [
-            format_prompt_optimized(q, docs, args.dataset_name, tokenizer=generator_tokenizer)
-            for q, docs in zip(questions, refined_results)
-        ]
-    else:
-        print("Formatting prompts with original template...")
-        prompts = [
-            format_prompt(q, docs, args.dataset_name)
-            for q, docs in zip(questions, refined_results)
-        ]
+    # Format prompts using tokenizer.apply_chat_template
+    print("Formatting prompts with tokenizer.apply_chat_template...")
+    prompts = [
+        format_prompt_optimized(q, docs, generator_tokenizer, args.dataset_name)
+        for q, docs in zip(questions, refined_results)
+    ]
     
     # --- Generate answers ---
     print("Starting answer generation...")
