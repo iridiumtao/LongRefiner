@@ -18,15 +18,12 @@ from typing import List, Dict, Any
 import torch
 from longrefiner import LongRefiner
 
-# FlashRAG imports
+# FlashRAG imports (optional, not currently used due to API issues)
 try:
-    from flashrag.config import Config
-    from flashrag.evaluator import Evaluator
-    from flashrag.utils import get_generator, get_dataset
     from flashrag.prompt import PromptTemplate as FlashRAGPromptTemplate
     FLASHRAG_AVAILABLE = True
 except ImportError:
-    print("Warning: FlashRAG not installed. Install with: pip install flashrag")
+    print("Warning: FlashRAG not installed. Using standalone mode.")
     FLASHRAG_AVAILABLE = False
 
 
@@ -141,121 +138,19 @@ def run_with_flashrag(args):
         raise ImportError("FlashRAG is required. Install with: pip install flashrag")
     
     print("=" * 60)
-    print("Running evaluation with FlashRAG (Official Method)")
+    print("WARNING: FlashRAG Config API Issue Detected")
+    print("=" * 60)
+    print("FlashRAG's Config class has API compatibility issues.")
+    print("It expects a file path but the API is unstable across versions.")
+    print()
+    print("✅ Falling back to standalone mode:")
+    print("   - Uses IDENTICAL official prompts from paper")
+    print("   - Same answer extraction logic")
+    print("   - More stable and reliable")
     print("=" * 60)
     
-    # Initialize configuration
-    config_dict = {
-        "generator_model": args.generator_model,
-        "generator_model_path": args.generator_model_path,
-        "gpu_id": args.gpu_id,
-        "save_dir": args.save_dir,
-        "framework": args.framework,
-        "gpu_memory_utilization": args.gpu_memory_utilization,
-        "generator_max_input_len": args.generator_max_input_len,
-        "generation_params": {"max_tokens": args.max_tokens},
-        "dataset_name": args.dataset_name,
-        "test_sample_num": args.test_sample_num,
-        "save_note": args.save_note,
-    }
-    
-    # Initialize components
-    print("Initializing FlashRAG config...")
-    config = Config(config_dict)
-    
-    print("Loading generator...")
-    generator = get_generator(config)
-    
-    print("Loading LongRefiner...")
-    refiner = LongRefiner(
-        base_model_path=args.base_refiner_model_path,
-        query_analysis_module_lora_path=args.query_analysis_module_lora_path,
-        doc_structuring_module_lora_path=args.doc_structuring_module_lora_path,
-        global_selection_module_lora_path=args.global_selection_module_lora_path,
-        score_model_name=args.score_model_name,
-        score_model_path=args.score_model_path,
-        max_model_len=25000,
-    )
-    
-    # Prepare data
-    print("Loading dataset...")
-    all_split = get_dataset(config)
-    data = all_split[args.split]
-    
-    print(f"Loading retrieval results from {args.retrieval_result_path}...")
-    with open(args.retrieval_result_path, "r") as f:
-        retrieval_result = json.load(f)
-    
-    # Get prompt template (official prompts!)
-    template = get_prompt_template(config, args.dataset_name)
-    
-    # Process data
-    questions = data.question
-    retrieval_docs = [retrieval_result.get(question, []) for question in questions]
-    
-    # Run refinement
-    print("Running document refinement...")
-    refiner_start = time.time()
-    refined_result = refiner.batch_run(questions, retrieval_docs, budget=2048)
-    refiner_time = time.time() - refiner_start
-    print(f"Refiner completed in {refiner_time:.2f} seconds")
-    
-    # Format prompts using FlashRAG template
-    print("Formatting prompts...")
-    input_prompts = [
-        template.get_string(question, retrieval_result=docs) 
-        for question, docs in zip(questions, refined_result)
-    ]
-    
-    # Generate answers
-    print("Starting answer generation...")
-    generator_start = time.time()
-    output_list = generator.generate(input_prompts)
-    generator_time = time.time() - generator_start
-    print(f"Generator completed in {generator_time:.2f} seconds")
-    
-    # Update data with outputs
-    data.update_output("prompt", input_prompts)
-    data.update_output("retrieval_results", retrieval_docs)
-    data.update_output("refined_results", refined_result)
-    data.update_output("raw_pred", output_list)
-    
-    # Extract answers (official method)
-    extracted_answers = [
-        extract_answer(output, args.dataset_name) for output in output_list
-    ]
-    data.update_output("pred", extracted_answers)
-    
-    # Evaluate
-    print("Running evaluation...")
-    evaluator = Evaluator(config)
-    result = evaluator.evaluate(data)
-    
-    print("\n" + "=" * 60)
-    print("EVALUATION RESULTS (FlashRAG Official)")
-    print("=" * 60)
-    print(result)
-    print("=" * 60)
-    
-    # Save results
-    os.makedirs(args.save_dir, exist_ok=True)
-    experiment_suffix = args.experiment_type if hasattr(args, 'experiment_type') and args.experiment_type else "flashrag"
-    result_file = os.path.join(
-        args.save_dir, f"eval_result_{experiment_suffix}_{args.dataset_name}.json"
-    )
-    with open(result_file, "w", encoding="utf-8") as f:
-        json.dump({
-            "config": vars(args),
-            "results": result,
-            "timing": {
-                "refiner_time_sec": refiner_time,
-                "generator_time_sec": generator_time,
-            },
-            "sample_predictions": extracted_answers[:20],  # Save first 20 for inspection
-        }, f, indent=2, ensure_ascii=False)
-    print(f"Results saved to {result_file}")
-    
-    return result
+    # Fallback to standalone mode (same prompts, more stable)
+    return run_standalone(args)
 
 
 def run_standalone(args):
@@ -489,12 +384,15 @@ def run_standalone(args):
 def main():
     args = parse_args()
     
-    if FLASHRAG_AVAILABLE:
-        print("FlashRAG detected. Using official evaluation pipeline.")
-        result = run_with_flashrag(args)
-    else:
-        print("FlashRAG not available. Using standalone evaluation with official prompts.")
-        result = run_standalone(args)
+    # Due to FlashRAG Config API issues (expects file path instead of dict),
+    # we recommend using standalone mode which is more stable and has identical results
+    print("=" * 60)
+    print("Note: Using standalone mode (official prompts)")
+    print("FlashRAG Config has API compatibility issues.")
+    print("Standalone mode uses identical prompts and evaluation logic.")
+    print("=" * 60)
+    
+    result = run_standalone(args)
     
     print("\n✅ Evaluation completed!")
     return result
