@@ -16,6 +16,7 @@ import time
 from typing import List, Dict, Any
 
 import torch
+import wandb
 from longrefiner import LongRefiner
 
 # FlashRAG imports (optional, not currently used due to API issues)
@@ -167,6 +168,23 @@ def run_standalone(args):
     print("=" * 60)
     print("Running evaluation (Standalone with Official Prompts)")
     print("=" * 60)
+    
+    # Initialize wandb
+    wandb_config = None
+    if args.wandb_enabled:
+        wandb_mode = "online" if os.getenv("WANDB_API_KEY") else "offline"
+        wandb.init(
+            project=args.wandb_project,
+            job_type="evaluation",
+            name=f"{args.experiment_type}_{args.dataset_name}",
+            mode=wandb_mode,
+        )
+        wandb_config = vars(args)
+        wandb.config.update(wandb_config)
+    
+    # Reset VRAM tracking
+    if torch.cuda.is_available():
+        torch.cuda.reset_max_memory_allocated()
     
     # Metrics functions
     def normalize_answer(s: str) -> str:
@@ -347,11 +365,104 @@ def run_standalone(args):
     # Compute metrics
     metrics = compute_metrics(predictions, ground_truths)
     
+    # --- Calculate system metrics ---
+    total_inference_time = refiner_time + generator_time
+    
+    if torch.cuda.is_available():
+        peak_vram_gb = torch.cuda.max_memory_allocated() / (1024**3)
+    else:
+        peak_vram_gb = 0.0
+    
+    num_samples = len(predictions)
+    avg_latency_ms = (total_inference_time / num_samples) * 1000 if num_samples > 0 else 0
+    refiner_latency_ms = (refiner_time / num_samples) * 1000 if num_samples > 0 else 0
+    generator_latency_ms = (generator_time / num_samples) * 1000 if num_samples > 0 else 0
+    
+    # Calculate model size (if available)
+    def get_model_size_gb(checkpoint_path: str) -> float:
+        if checkpoint_path is None:
+            return 0.0
+        from pathlib import Path
+        path = Path(checkpoint_path)
+        if not path.exists():
+            return 0.0
+        total_size = 0
+        if path.is_file():
+            total_size = path.stat().st_size
+        else:
+            for file in path.rglob("*"):
+                if file.is_file():
+                    total_size += file.stat().st_size
+        return total_size / (1024**3)
+    
+    model_size_gb = get_model_size_gb(args.model_checkpoint_path)
+    
+    # Calculate FLOPs
+    def estimate_model_params(model_path: str) -> float:
+        model_path_lower = model_path.lower()
+        if "0.5b" in model_path_lower or "0_5b" in model_path_lower:
+            return 0.5e9
+        elif "3b" in model_path_lower:
+            return 3.0e9
+        elif "7b" in model_path_lower:
+            return 7.0e9
+        elif "8b" in model_path_lower:
+            return 8.0e9
+        else:
+            return 3.0e9
+    
+    refiner_params = estimate_model_params(args.base_refiner_model_path)
+    generator_params = estimate_model_params(args.generator_model_path)
+    
+    refiner_total_tokens = 50 + (500 * args.avg_retrieval_docs) + 1000
+    refiner_gflops = (2 * refiner_params * refiner_total_tokens) / 1e9
+    generator_gflops = (2 * generator_params * (args.avg_input_tokens + args.avg_output_tokens)) / 1e9
+    total_gflops = refiner_gflops + generator_gflops
+    
+    # --- Log to wandb ---
+    if args.wandb_enabled:
+        wandb.log({
+            # System metrics
+            "system/peak_vram_gb": peak_vram_gb,
+            "system/total_inference_time_sec": total_inference_time,
+            "system/avg_latency_ms_per_sample": avg_latency_ms,
+            "system/refiner_latency_ms_per_sample": refiner_latency_ms,
+            "system/generator_latency_ms_per_sample": generator_latency_ms,
+            "system/total_gflops_per_query": total_gflops,
+            "system/num_samples": num_samples,
+            # Task metrics
+            "task/em": metrics["em"],
+            "task/f1": metrics["f1"],
+        })
+        
+        wandb.summary.update({
+            "inference/peak_vram_gb": peak_vram_gb,
+            "inference/avg_latency_ms_per_sample": avg_latency_ms,
+            "inference/total_gflops_per_query": total_gflops,
+            "final/em": metrics["em"],
+            "final/f1": metrics["f1"],
+            "experiment_type": args.experiment_type,
+            "dataset_name": args.dataset_name,
+        })
+        
+        if model_size_gb > 0:
+            wandb.summary["inference/model_size_gb"] = model_size_gb
+        
+        wandb.finish()
+        print("✅ Wandb logging completed!")
+    
     print("\n" + "=" * 60)
     print("EVALUATION RESULTS (Standalone with Official Prompts)")
     print("=" * 60)
     print(f"EM (Exact Match): {metrics['em']:.4f} ({metrics['em']*100:.2f}%)")
     print(f"F1 Score: {metrics['f1']:.4f} ({metrics['f1']*100:.2f}%)")
+    print("-" * 60)
+    print("System Metrics:")
+    print(f"  Peak VRAM: {peak_vram_gb:.2f} GB")
+    print(f"  Avg Latency: {avg_latency_ms:.2f} ms/sample")
+    print(f"  FLOPs per Query: {total_gflops:.2f} GFLOPs")
+    if model_size_gb > 0:
+        print(f"  Model Size: {model_size_gb:.2f} GB")
     print("=" * 60)
     
     # Save results
@@ -364,9 +475,12 @@ def run_standalone(args):
         json.dump({
             "config": vars(args),
             "task_metrics": metrics,
-            "timing": {
-                "refiner_time_sec": refiner_time,
-                "generator_time_sec": generator_time,
+            "system_metrics": {
+                "peak_vram_gb": peak_vram_gb,
+                "avg_latency_ms_per_sample": avg_latency_ms,
+                "total_inference_time_sec": total_inference_time,
+                "total_gflops_per_query": total_gflops,
+                "model_size_gb": model_size_gb,
             },
             "predictions": predictions[:100],  # Save first 100 for inspection
         }, f, indent=2, ensure_ascii=False)
