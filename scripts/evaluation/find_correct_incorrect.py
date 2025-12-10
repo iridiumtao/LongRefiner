@@ -247,7 +247,7 @@ def main():
     print("📋 COMPARISON RESULTS (Based on Base Model)")
     print("=" * 120)
     
-    print(f"\n📊 Model Performance:")
+    print(f"\nModel Performance:")
     print(f"   Base:  EM={base_data['em_score']*100:.1f}%, F1={base_data['f1_score']*100:.1f}%")
     if lora_data:
         print(f"   LoRA:  EM={lora_data['em_score']*100:.1f}%, F1={lora_data['f1_score']*100:.1f}%")
@@ -255,16 +255,16 @@ def main():
         print(f"   QLoRA: EM={qlora_data['em_score']*100:.1f}%, F1={qlora_data['f1_score']*100:.1f}%")
     
     # Display correct answers (where base is correct)
-    print_comparison_table(correct_examples, "✅ CORRECT ANSWERS (Base Model)")
+    print_comparison_table(correct_examples, "CORRECT ANSWERS (Base Model)")
     
     # Display incorrect answers (where base is incorrect)
-    print_comparison_table(incorrect_examples, "❌ INCORRECT ANSWERS (Base Model)")
+    print_comparison_table(incorrect_examples, "INCORRECT ANSWERS (Base Model)")
     
-    print("\n" + "=" * 120)
-    print("✅ Analysis complete!")
-    print("=" * 120)
+
     print("\nLegend: ✓ = Correct, ✗ = Incorrect")
 
-
+    print("\n" + "=" * 120)
+    print("Analysis complete!")
+    print("=" * 120)
 if __name__ == "__main__":
     main()

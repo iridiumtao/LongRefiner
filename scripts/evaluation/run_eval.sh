@@ -69,6 +69,10 @@ echo "Running evaluation: ${EXPERIMENT_TYPE}"
 echo "Dataset: ${DATASET_NAME}"
 echo "=============================================="
 
+# Choose one of the following commands to run the evaluation
+# uv run python scripts/evaluation/run_eval_flashrag.py \
+# uv run python scripts/evaluation/run_eval.py \
+
 uv run python scripts/evaluation/run_eval_flashrag.py \
     --dataset_name "${DATASET_NAME}" \
     --split "${SPLIT}" \
