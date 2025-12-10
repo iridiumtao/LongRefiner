@@ -73,7 +73,7 @@ echo "=============================================="
 # uv run python scripts/evaluation/run_eval_flashrag.py \
 # uv run python scripts/evaluation/run_eval.py \
 
-uv run python scripts/evaluation/run_eval_flashrag.py \
+uv run python scripts/evaluation/run_eval.py \
     --dataset_name "${DATASET_NAME}" \
     --split "${SPLIT}" \
     --retrieval_result_path "${RETRIEVAL_RESULT}" \
